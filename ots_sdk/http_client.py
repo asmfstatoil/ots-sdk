@@ -1,5 +1,9 @@
 from typing import Literal, Optional, TypedDict, Union, Dict, Any
-from azure.identity import InteractiveBrowserCredential, AuthenticationRecord, TokenCachePersistenceOptions
+from azure.identity import (
+    InteractiveBrowserCredential,
+    AuthenticationRecord,
+    TokenCachePersistenceOptions,
+)
 from azure.identity._internal.msal_credentials import MsalCredential
 import os
 import requests
@@ -88,6 +92,7 @@ def get_interactive_browser_credential(
             f.write(auth_record.serialize())
 
     return credential
+
 
 @retry(logger=logger)
 def _request(

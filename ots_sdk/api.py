@@ -1,6 +1,10 @@
 from typing import List, Literal, Optional
 from azure.identity._internal.msal_credentials import MsalCredential
-from ots_sdk.http_client import HttpClient, ContentType, get_interactive_browser_credential
+from ots_sdk.http_client import (
+    HttpClient,
+    ContentType,
+    get_interactive_browser_credential,
+)
 from ots_sdk.models import (
     DatapointModel,
     DatapointsItemsModel,
@@ -103,7 +107,9 @@ class TimeseriesAPI:
     """
 
     def __init__(
-        self, azure_credential: Optional[MsalCredential] = None, environment: TimeseriesEnvironment = TimeseriesEnvironment.Prod()
+        self,
+        azure_credential: Optional[MsalCredential] = None,
+        environment: TimeseriesEnvironment = TimeseriesEnvironment.Prod(),
     ):
         if azure_credential is None:
             azure_credential = get_interactive_browser_credential()
