@@ -111,6 +111,13 @@ class TimeseriesAPI:
         azure_credential: Optional[MsalCredential] = None,
         environment: TimeseriesEnvironment = TimeseriesEnvironment.Prod(),
     ):
+        """Initialize a new TimeseriesAPI connector client.
+
+        Args:
+            azure_credential (Optional[MsalCredential], optional): Azure credential instance used for authenticating. 
+        Defaults to None, which will use interactive browser authentication.
+            environment (TimeseriesEnvironment, optional): Which environment to connecto to. Defaults to TimeseriesEnvironment.Prod().
+        """
         if azure_credential is None:
             azure_credential = get_interactive_browser_credential()
         self._http_client = HttpClient(

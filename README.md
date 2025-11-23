@@ -33,6 +33,16 @@ We support the following authentication flows:
 
 The supported credential setups are shown below.
 
+#### With user impersonation
+
+Read [Authenticating by user impersonation without any shared secret (For people with Equinor accounts)](https://github.com/equinor/OmniaPlant/wiki/Authentication-&-Authorization#authenticating-by-user-impersonation-without-any-shared-secret-for-people-with-equinor-accounts) and ensure prerequisite steps have been done.
+
+```python
+client = ots.TimeseriesAPI()
+```
+
+During authentication, this will open web page.
+
 #### With service principal credentials
 
 Read [Service-to-service using a shared secret](https://github.com/equinor/OmniaPlant/wiki/Authentication-&-Authorization#service-to-service-using-a-shared-secret) and ensure prerequisite steps have been done.
@@ -46,27 +56,6 @@ credentials = ClientSecretCredential(
     client_secret=os.environ['AZURE_CLIENT_SECRET']
 )
 ```
-
-#### With user impersonation
-
-Read [Authenticating by user impersonation without any shared secret (For people with Equinor accounts)](https://github.com/equinor/OmniaPlant/wiki/Authentication-&-Authorization#authenticating-by-user-impersonation-without-any-shared-secret-for-people-with-equinor-accounts) and ensure prerequisite steps have been done.
-
-For testing user impersonation you can use our public client ids:
-
-- 675bd975-260f-498e-82cd-65f67b34fe7d (test)
-- 67da184b-6bde-43fd-a155-30ed4ff162d2 (production)
-
-```python
-from azure.identity import DeviceCodeCredential
-import os
-credentials = DeviceCodeCredential(
-    tenant_id=os.environ['AZURE_TENANT_ID'],
-    client_id=os.environ['AZURE_CLIENT_ID']
-)
-```
-
-During authentication, this will display a URL to visit, and a code to enter. After completing
-the flow, execution will proceed.
 
 #### With default credentials (azure cli, MSI and so on)
 
