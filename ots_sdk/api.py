@@ -114,7 +114,7 @@ class TimeseriesAPI:
         """Initialize a new TimeseriesAPI connector client.
 
         Args:
-            azure_credential (Optional[MsalCredential], optional): Azure credential instance used for authenticating. 
+            azure_credential (Optional[MsalCredential], optional): Azure credential instance used for authenticating.
         Defaults to None, which will use interactive browser authentication.
             environment (TimeseriesEnvironment, optional): Which environment to connecto to. Defaults to TimeseriesEnvironment.Prod().
         """

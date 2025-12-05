@@ -20,14 +20,14 @@ def retry(
             _tries, _delay = total_tries, initial_wait
             exception = None
             while _tries > 0:
-                if logger:
+                if logger is not None:
                     logger.debug(f"{total_tries + 1 - _tries}. try:")
                 try:
                     return f(*args, **kwargs)
                 except TimeseriesRequestFailedException as e:
                     _tries -= 1
                     if e.status_code in retry_status_codes:
-                        if logger:
+                        if logger is not None:
                             if _tries == 0:
                                 msg = str(
                                     f"Function: {f.__name__} Failed despite best efforts after {total_tries} tries."
@@ -42,7 +42,7 @@ def retry(
                         _delay *= backoff_factor
                         exception = e
                     else:
-                        if logger:
+                        if logger is not None:
                             logger.debug(f"Status code {e.status_code} not retryable")
                         exception = e
                         break
