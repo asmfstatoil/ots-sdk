@@ -32,12 +32,11 @@ def retry(
                                 msg = str(
                                     f"Function: {f.__name__} Failed despite best efforts after {total_tries} tries."
                                 )
-                                logger.warning(msg)
                             else:
                                 msg = str(
                                     f"Function: {f.__name__} failed with {e}. Retrying in {_delay} seconds, with {_tries} retries remaining!\n"
                                 )
-                                logger.warning(msg)
+                            logger.warning(msg)
                         time.sleep(_delay)
                         _delay *= backoff_factor
                         exception = e
