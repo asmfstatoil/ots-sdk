@@ -27,12 +27,13 @@ repository = "https://github.com/asmfstatoil/omnia-timeseries-python"
 
 [tool.black]
 line-length = 88
-target-version = ['py39']
+target-version = ['py310']
 include = '\.pyi?$'
 exclude = '^/src/version.py'
 extend-exclude = '''
 (
 ^/foo.py
+| .venv/
 | .*_pb2.py
 )
 '''
