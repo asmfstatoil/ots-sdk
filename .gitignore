@@ -144,3 +144,4 @@ test.ipynb
 poetry.lock
 token_cache.bin
 *_auth.json
+.DS_Store
