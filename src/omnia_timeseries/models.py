@@ -79,6 +79,45 @@ class GetAggregatesResponseModel(TypedDict):
     continuationToken: Optional[str]
 
 
+class IMSMetadataModel(TypedDict):
+    id: str
+    uid: str
+    imsType: str
+    systemCode: str
+    recordId: bool
+    plantSapCode: str
+    plantStidCode: str
+    tag: str
+    terminal: str
+    isDefaultTerminal: str
+    description: str
+    engUnits: str
+    standardUnit: str
+    source: str
+    type: str
+    sourceTag: str
+    stepped: str
+    changeDate: str
+    creationDate: str
+    currentValueDate: str
+    compressed: str
+    compressionDeviation: str
+    compressionMaximum: str
+    compressionMinimum: str
+    compressionDeviationPercent: str
+    plantArea: str
+    significantDigit: str
+    maxTimeInterval: str
+    fieldId: str
+
+class IMSMetadataItemsModel(TypedDict):
+    items: List[IMSMetadataModel]
+
+class GetIMSMetadataResponseModel(TypedDict):
+    data: IMSMetadataItemsModel
+    count: Optional[int]
+    continuationToken: Optional[str]
+
 class TimeseriesModel(TypedDict):
     id: str
     name: str
@@ -103,6 +142,13 @@ class GetTimeseriesResponseModel(TypedDict):
     count: Optional[int]
     continuationToken: Optional[str]
 
+class SubscriptionPatchRequestItem(TypedDict, total=False):
+    name: Optional[str]
+    plantStidCode: Optional[str]
+    plantSapCode: Optional[bool]
+    terminal: Optional[str]
+    fieldId: Optional[str]
+    timeseriesId: Optional[str]
 
 class TimeseriesRequestItem(TypedDict, total=False):
     name: str
@@ -182,6 +228,9 @@ class StreamSubscriptionItemsModel(TypedDict):
 class StreamSubscriptionDataModel(TypedDict):
     data: StreamSubscriptionItemsModel
 
+class SubscriptionCounterModel(TypedDict):
+    quota: int
+    count: int
 
 class TimeseriesRequestFailedException(Exception):
     def __init__(self, response: Response) -> None:
@@ -212,5 +261,5 @@ class TimeseriesRequestFailedException(Exception):
         return self._message
 
     @property
-    def trace_id(self) -> str:
+    def trace_id(self) -> Optional[str]:
         return self._trace_id
