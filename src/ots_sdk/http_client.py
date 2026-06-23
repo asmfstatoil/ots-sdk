@@ -4,7 +4,6 @@ from azure.identity import (
     AuthenticationRecord,
     TokenCachePersistenceOptions,
 )
-from azure.identity._internal.msal_credentials import MsalCredential
 from azure.core.credentials import TokenCredential
 import requests
 import logging

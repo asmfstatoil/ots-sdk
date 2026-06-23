@@ -1,6 +1,5 @@
 from dataclasses import dataclass
 from typing import Any, Dict, List, Literal, Optional
-from azure.identity._internal.msal_credentials import MsalCredential
 from azure.core.credentials import TokenCredential
 from ots_sdk.http_client import (
     HttpClient,
@@ -223,19 +222,19 @@ class IMSMetadataAPI:
     Wrapper class for interacting with the Omnia Industrial IIoT IMS Metadata API.
     For more information, see https://github.com/equinor/OmniaPlant/wiki or consult with the Omnia IIoT team.
 
-    :param MsalCredential azure_credential: Azure credential instance used for authenticating
+    :param TokenCredential azure_credential: Azure credential instance used for authenticating
     :param TimeseriesEnvironment environment: API deployment environment
     """
 
     def __init__(
         self,
-        azure_credential: Optional[MsalCredential] = None,
+        azure_credential: Optional[TokenCredential] = None,
         environment: TimeseriesEnvironment = TimeseriesEnvironment.Prod(),
     ):
         """Initialize a new TimeseriesAPI connector client.
 
         Args:
-            azure_credential (Optional[MsalCredential], optional): Azure credential instance used for authenticating.
+            azure_credential (Optional[TokenCredential], optional): Azure credential instance used for authenticating.
         Defaults to None, which will use interactive browser authentication.
             environment (TimeseriesEnvironment, optional): Which environment to connecto to. Defaults to TimeseriesEnvironment.Prod().
         """
@@ -277,7 +276,7 @@ class IMSSubscriptionsAPI:
     Wrapper class for interacting with the Omnia Industrial IIoT IMS Subscriptions API.
     For more information, see https://github.com/equinor/OmniaPlant/wiki or consult with the Omnia IIoT team.
 
-    :param MsalCredential azure_credential: Azure credential instance used for authenticating
+    :param TokenCredential azure_credential: Azure credential instance used for authenticating
     :param TimeseriesEnvironment environment: API deployment environment
     """
 
@@ -368,7 +367,7 @@ class IMSSubscriptionsManagementAPI:
     Wrapper class for interacting with the Omnia Industrial IIoT IMS Subscriptions Management API.
     For more information, see https://github.com/equinor/OmniaPlant/wiki or consult with the Omnia IIoT team.
 
-    :param MsalCredential azure_credential: Azure credential instance used for authenticating
+    :param TokenCredential azure_credential: Azure credential instance used for authenticating
     :param TimeseriesEnvironment environment: API deployment environment
     """
 
