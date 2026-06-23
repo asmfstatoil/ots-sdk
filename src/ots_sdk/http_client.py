@@ -1,3 +1,4 @@
+import os
 from typing import Literal, Optional, Union, Dict, Any, Mapping, Sequence
 from azure.identity import (
     InteractiveBrowserCredential,
