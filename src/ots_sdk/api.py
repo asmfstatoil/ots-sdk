@@ -419,8 +419,10 @@ class TimeseriesAPI:
     """
 
     def __init__(
-        self, azure_credential: TokenCredential, environment: TimeseriesEnvironment
+        self, azure_credential: Optional[TokenCredential] = None, environment: TimeseriesEnvironment = TimeseriesEnvironment.Prod()
     ):
+        if azure_credential is None:
+            azure_credential = get_interactive_browser_credential()
         if not isinstance(environment, TimeseriesEnvironment):
             raise TypeError(f"Environment must be TimeseriesEnvironment, got: {type(environment).__name__}")
         apiEnvironment=TimeseriesApiEnvironment(environment)
