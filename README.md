@@ -27,7 +27,7 @@ Follow [get data as protobuf example](https://github.com/equinor/omnia-timeserie
 
 Read https://github.com/equinor/OmniaPlant/wiki/Authentication-&-Authorization to familiarize yourself with how Timeseries API handles authentication and authorization.
 
-The `TimeseriesAPI` client accepts any `azure.identity` credential that inherits from `MsalCredential`, so you can pick the flow that suits your environment. The options we currently cover are:
+The `TimeseriesAPI` client accepts any `azure.identity` credential that inherits from `TokenCredential`, so you can pick the flow that suits your environment. The options we currently cover are:
 - **User Impersonation with interactive login**
 This is the primary reason for this fork existing. Using msal and a public azure application that supports user impersonation.
 - **Service principal with client secret** (`ClientSecretCredential`) for headless service-to-service scenarios.
