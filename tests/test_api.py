@@ -99,9 +99,9 @@ def should_forward_align_to_cache_parameter_for_multi_datapoints(api):
         api.get_multi_datapoints([{"id": "series-1"}], alignToCache=True)
         assert m.call_count == 1, "Expected a single request"
         request = m.request_history[0]
-        assert request.qs.get("aligntocache") == ["true"], (
-            "alignToCache should be forwarded"
-        )
+        assert request.qs.get("aligntocache") == [
+            "true"
+        ], "alignToCache should be forwarded"
 
 
 def should_forward_align_to_cache_parameter_for_get_aggregates(api):
@@ -114,9 +114,9 @@ def should_forward_align_to_cache_parameter_for_get_aggregates(api):
         api.get_aggregates("1234", ["avg"], alignToCache=False)
         assert m.call_count == 1, "Expected a single request"
         request = m.request_history[0]
-        assert request.qs.get("aligntocache") == ["false"], (
-            "alignToCache should be forwarded as false"
-        )
+        assert request.qs.get("aligntocache") == [
+            "false"
+        ], "alignToCache should be forwarded as false"
 
 
 def should_include_debug_query_param_when_debug_mode_is_enabled(api):
@@ -130,9 +130,9 @@ def should_include_debug_query_param_when_debug_mode_is_enabled(api):
         api.get_multi_datapoints([{"id": "series-1"}])
         assert m.call_count == 1, "Expected a single request"
         request = m.request_history[0]
-        assert request.qs.get("debug") == ["true"], (
-            "Debug mode should inject debug=true"
-        )
+        assert request.qs.get("debug") == [
+            "true"
+        ], "Debug mode should inject debug=true"
 
 
 def should_patch_subscription_by_uid_with_state_fields_only(
