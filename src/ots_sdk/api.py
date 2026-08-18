@@ -399,15 +399,19 @@ class IMSSubscriptionsManagementAPI:
     def patch_subscription_by_uid(
         self,
         uid: str,
-        request: SubscriptionPatchRequestItem
+        request: Optional[SubscriptionPatchRequestItem] = None,
+        resetState: Optional[bool] = None,
     ) -> GetIMSMetadataResponseModel:
         """
-        Search IMS Subscriptions Management API
+        Patch subscription by UID in IMS Subscriptions Management API
         """
-        url = (
-            f"{self._base_url}/uid/{uid}"
+        url = f"{self._base_url}/uid/{uid}"
+        params = {}
+        if resetState is not None:
+            params["resetState"] = resetState
+        return self._http_client.request(
+            request_type="patch", url=url, params=params, payload=request
         )
-        return self._http_client.request(request_type="patch", url=url, payload=request)
 
 class TimeseriesAPI:
     """
