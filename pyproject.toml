@@ -11,16 +11,16 @@ dependencies = [
     "azure-core>=1.30.0,<2.0.0",
     "opentelemetry-instrumentation-requests >=0.54b1,<1.0.0",
     "opentelemetry-api >=1.27.0,<2.0.0",
-    "cryptography >=46.0.5,<47.0.0",
+    "cryptography >=48.0.1,<50.0.0",
 ]
 
 [tool.poetry.group.test.dependencies]
-pytest = ">=7.4.0,<9.0.0"
+pytest = ">=7.4.0,<10.0.0"
 requests-mock = ">=1.9.0,<2.0.0"
 
 [tool.poetry.group.dev.dependencies]
 pre-commit = ">=3.0.0,<5.0.0"
-black = ">=22.0,<26.0"
+black = ">=22.0,<27.0"
 
 [project.urls]
 repository = "https://github.com/asmfstatoil/omnia-timeseries-python"
@@ -39,5 +39,5 @@ extend-exclude = '''
 '''
 
 [build-system]
-requires = [ "poetry-core>=1.8,<2.0; python_version < '3.9'", "poetry-core>=2.0,<3.0; python_version >= '3.9'" ]
+requires = [ "poetry-core>=2.0,<3.0" ]
 build-backend = "poetry.core.masonry.api"

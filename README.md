@@ -4,13 +4,21 @@ Python package for interacting with the [Omnia Industrial IoT Timeseries API](ht
 
 Forked version of Official python sdk available at https://github.com/equinor/omnia-timeseries-python.
 
-## How do I get set up? ###
+## Installation
 
-To use the Python package, install it in the following manner:
+Install from PyPI:
 
 ```
 pip install ots-sdk
 ```
+
+Install from a specific Git tag (for example, if you need an earlier SDK version):
+
+```
+pip install git+https://github.com/equinor/omnia-timeseries-python.git@vX.Y.Z
+```
+
+Supported Python versions: 3.10+
 
 For support, create an issue on GitHub.
 
