@@ -1,10 +1,14 @@
+import copy
+import inspect
 import json
+from urllib import parse
 
+import pandas as pd
 import requests_mock
 import pytest
 from azure.core.credentials import AccessToken
 from ots_sdk import TimeseriesAPI, TimeseriesEnvironment
-from ots_sdk.api import IMSSubscriptionsManagementAPI
+from ots_sdk.api import FederationSource, IMSSubscriptionsManagementAPI
 from ots_sdk.http_client import TimeseriesRequestFailedException
 
 
@@ -30,6 +34,233 @@ def imssubscriptionsmanagementapi():
     )
     api._base_url = "https://test"
     return api
+
+
+def should_match_get_datapoints_parameters_for_read():
+    assert (
+        inspect.signature(TimeseriesAPI.read).parameters
+        == inspect.signature(TimeseriesAPI.get_datapoints).parameters
+    )
+
+
+def should_reject_non_json_output_for_read(api):
+    with pytest.raises(ValueError, match="requires accept='application/json'"):
+        api.read("1234", accept="application/x-protobuf")
+
+
+def should_match_get_aggregates_parameters_for_read_aggregates():
+    assert (
+        inspect.signature(TimeseriesAPI.read_aggregates).parameters
+        == inspect.signature(TimeseriesAPI.get_aggregates).parameters
+    )
+
+
+def should_reject_non_json_output_for_read_aggregates(api):
+    with pytest.raises(ValueError, match="requires accept='application/json'"):
+        api.read_aggregates("1234", ["avg"], accept="application/x-protobuf")
+
+
+@pytest.mark.parametrize("aggregate_functions", [[], ["avg", "max"]])
+def should_require_one_aggregate_function_for_read_aggregates(api, aggregate_functions):
+    with pytest.raises(ValueError, match="requires exactly one aggregate function"):
+        api.read_aggregates("1234", aggregate_functions)
+
+
+@pytest.mark.parametrize(
+    "aggregate_function",
+    [None, "avg", "min", "max", "sum", "stddev", "count", "first", "last"],
+)
+def should_read_series_and_forward_parameters(
+    api, documented_response, aggregate_function
+):
+    item = documented_response["data"]["items"][0]
+    datapoint = item["datapoints"][0]
+    expected_value = datapoint["value"]
+    parameters = {
+        "id": item["id"],
+        "startTime": "2022-01-01T00:00:00.000Z",
+        "endTime": "2022-01-02T00:00:00.000Z",
+        "status": [192],
+        "limit": 10,
+        "continuationToken": "test-token",
+        "federationSource": FederationSource.IMS,
+        "accept": "application/json",
+    }
+    expected_query = {
+        "starttime": [parameters["startTime"]],
+        "endtime": [parameters["endTime"]],
+        "status": ["192"],
+        "limit": ["10"],
+        "continuationtoken": ["test-token"],
+        "federationsource": ["IMS"],
+        "debug": ["True"],
+    }
+    api._debug_mode = True
+    url = f"https://test/{item['id']}/data"
+    if aggregate_function is None:
+        method = api.read
+        parameters["includeOutsidePoints"] = False
+        expected_query["includeoutsidepoints"] = ["False"]
+    else:
+        method = api.read_aggregates
+        url += "/aggregates"
+        datapoint[aggregate_function] = datapoint.pop("value")
+        parameters.update(
+            aggregateFunction=[aggregate_function],
+            processingInterval="1h",
+            fill="none",
+            alignToCache=False,
+        )
+        expected_query.update(
+            aggregatefunction=[aggregate_function],
+            processinginterval=["1h"],
+            fill=["none"],
+            aligntocache=["False"],
+        )
+
+    with requests_mock.Mocker() as transport:
+        transport.get(url, json=documented_response)
+        series = method(**parameters)
+
+        assert transport.call_count == 1
+        request = transport.request_history[0]
+        actual_query = {
+            key.lower(): values
+            for key, values in parse.parse_qs(parse.urlsplit(request.url).query).items()
+        }
+        assert actual_query == expected_query
+        assert request.headers["Accept"] == "application/json"
+
+    expected = pd.Series(
+        [expected_value],
+        index=pd.to_datetime([datapoint["time"]], utc=True).tz_convert("Europe/Oslo"),
+        name=item["id"],
+    )
+    pd.testing.assert_series_equal(series, expected)
+
+
+@pytest.mark.parametrize("method_name", ["read", "read_aggregates"])
+@pytest.mark.parametrize("item_count", [0, 1, 2])
+def should_handle_empty_and_multiple_read_items(
+    api, documented_response, method_name, item_count
+):
+    item = documented_response["data"]["items"][0]
+    item["datapoints"].clear()
+    documented_response["data"]["items"] = [
+        copy.deepcopy(item) for _ in range(item_count)
+    ]
+    parameters = {"id": item["id"]}
+    url = f"https://test/{item['id']}/data"
+    if method_name == "read_aggregates":
+        parameters["aggregateFunction"] = ["avg"]
+        url += "/aggregates"
+
+    with requests_mock.Mocker() as transport:
+        transport.get(url, json=documented_response)
+        if item_count == 1:
+            series = getattr(api, method_name)(**parameters)
+            assert isinstance(series, pd.Series)
+            assert series.empty
+            assert series.name == item["id"]
+            assert str(series.index.tz) == "Europe/Oslo"
+        else:
+            with pytest.raises(
+                ValueError, match="Expected exactly one OTS response item"
+            ):
+                getattr(api, method_name)(**parameters)
+
+
+@pytest.fixture
+def metadata_item():
+    return {
+        "id": "series-1",
+        "name": "test-tag",
+        "description": "Test metadata record",
+        "source": "test-source",
+        "facility": "test-facility",
+        "unit": "bar",
+        "metadata": {"test": True},
+    }
+
+
+@pytest.mark.parametrize("selector", ["id", "name", "tag_no", "matching_aliases"])
+def should_get_metadata_as_list(api, metadata_item, selector):
+    if selector == "id":
+        parameters = {"id": metadata_item["id"]}
+        url = "https://test/series-1"
+        expected_query = {}
+    else:
+        parameters = {
+            "source": metadata_item["source"],
+            "facility": metadata_item["facility"],
+        }
+        if selector == "matching_aliases":
+            parameters.update(name="test-tag", tag_no="test-tag")
+        else:
+            parameters[selector] = metadata_item["name"]
+        url = "https://test/"
+        expected_query = {
+            "name": ["test-tag"],
+            "source": ["test-source"],
+            "facility": ["test-facility"],
+        }
+
+    with requests_mock.Mocker() as transport:
+        transport.get(url, json={"data": {"items": [metadata_item]}})
+        items = api.get_metadata(**parameters)
+
+        assert items == [metadata_item]
+        assert transport.call_count == 1
+        assert transport.request_history[0].qs == expected_query
+
+
+@pytest.mark.parametrize("selector", [{"id": "series-1"}, {"tag_no": "test-tag"}])
+@pytest.mark.parametrize("response", [{}, {"data": {}}, {"data": {"items": []}}])
+def should_return_empty_metadata_list(api, selector, response):
+    url = "https://test/series-1" if "id" in selector else "https://test/"
+    with requests_mock.Mocker() as transport:
+        transport.get(url, json=response)
+        assert api.get_metadata(**selector) == []
+
+
+@pytest.mark.parametrize(
+    "parameters",
+    [
+        {},
+        {"source": "test-source"},
+        {"name": ""},
+        {"tag_no": ""},
+        {"id": "series-1", "name": "test-tag"},
+        {"id": "series-1", "tag_no": "test-tag"},
+        {"id": "series-1", "source": "test-source"},
+        {"id": "series-1", "facility": "test-facility"},
+        {"name": "test-tag", "tag_no": "different-tag"},
+    ],
+)
+def should_reject_invalid_metadata_selectors_without_request(api, parameters):
+    with requests_mock.Mocker() as transport:
+        with pytest.raises(ValueError):
+            api.get_metadata(**parameters)
+        assert transport.call_count == 0
+
+
+@pytest.mark.parametrize("method_name", ["read", "read_aggregates", "get_metadata"])
+def should_preserve_api_errors_in_wrappers(api, method_name):
+    parameters = {"id": "series-1"}
+    url = "https://test/series-1"
+    if method_name != "get_metadata":
+        url += "/data"
+    if method_name == "read_aggregates":
+        url += "/aggregates"
+        parameters["aggregateFunction"] = ["avg"]
+    with requests_mock.Mocker() as transport:
+        transport.get(
+            url, status_code=403, json={"message": "Forbidden", "traceId": "test"}
+        )
+        with pytest.raises(TimeseriesRequestFailedException) as error:
+            getattr(api, method_name)(**parameters)
+        assert error.value.status_code == 403
+        assert transport.call_count == 1
 
 
 def should_retry_request_when_failing_on_retryable_error_code_503_service_is_unavailable(

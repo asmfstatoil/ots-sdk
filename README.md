@@ -147,6 +147,106 @@ The `Protobuf` response from Timeseries API looks like this:
 { "data": [ { "id": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx", "totalCount": "1", "fields": [ "time", "value", "status" ], "values": [ { "int64": "1727263834898000000" }, { "double": 246.56092834472656 }, { "uint32": 192 } ] } ] }
 ```
 
+### Convert JSON responses to a DataFrame
+
+```python
+from ots_sdk.helpers import _ots_response_to_frame
+
+response = client.get_datapoints(timeseries_id)
+frame = _ots_response_to_frame(response, column_name="measurement", value_key="value")
+```
+
+The helper converts all series in a JSON `data.items` response to a pandas
+DataFrame indexed by `Europe/Oslo` timestamps. Series are aligned on the union
+of their timestamps; missing measurements remain `NaN`, without interpolation
+or forward filling. It sorts timestamps, keeps the first value for duplicate
+timestamps within each series, and returns an empty DataFrame (`frame.empty`
+is `True`) when there are no items or datapoints.
+
+For multiple series, columns default to the series IDs. Pass a mapping from
+series IDs to column names to rename them:
+
+```python
+frame = _ots_response_to_frame(
+    response,
+    column_name={pressure_id: "pressure", temperature_id: "temperature"},
+    value_key="avg",
+)
+```
+
+A string `column_name` renames a single-series response; multiple-series
+responses use IDs instead. For aggregated data, pass the aggregate field
+(for example, `"avg"`) as `value_key`; missing or null values fall back to the
+`"value"` field. API methods continue to return their original responses.
+
+### Convert a single series to a pandas Series
+
+Use `TimeseriesAPI.read()` to fetch datapoints directly as a pandas Series:
+
+```python
+series = client.read(timeseries_id, startTime=start_time, endTime=end_time)
+```
+
+`read()` accepts the same parameters as `get_datapoints()` and forwards them
+to that method. It requires `accept="application/json"`; Protobuf output is
+not supported. The response must contain exactly one item. The returned Series
+is named with the item ID, indexed in `Europe/Oslo`, sorted, and deduplicated.
+An item with no datapoints returns an empty Series.
+
+Use `read_aggregates()` for an aggregated Series:
+
+```python
+series = client.read_aggregates(
+    timeseries_id,
+    aggregateFunction=["avg"],
+    startTime=start_time,
+    endTime=end_time,
+    processingInterval="1h",
+)
+```
+
+It accepts the same parameters as `get_aggregates()`, including `alignToCache`,
+but requires JSON output and exactly one aggregate function. The requested
+aggregate field supplies the Series values; timestamp and empty-item handling
+are the same as `read()`.
+
+To convert an existing response:
+
+```python
+from ots_sdk.helpers import _ots_response_to_series
+
+series = _ots_response_to_series(response, name="measurement", value_key="value")
+```
+
+This helper requires exactly one item in `data.items` and raises `ValueError`
+for zero or multiple items. It uses the same timestamp normalization,
+deduplication, sorting, and value fallback as the DataFrame helper. The Series
+name defaults to the item ID. An item with no datapoints returns an empty
+Series (`series.empty` is `True`) with an Oslo-time index.
+
+### Read timeseries metadata
+
+```python
+items = client.get_metadata(timeseries_id)
+for item in items:
+    print(item.get("name"), item.get("description"), item.get("unit"))
+```
+
+Look up metadata by name or tag number instead of ID:
+
+```python
+items = client.get_metadata(name=tag_name, source=source, facility=facility_code)
+items = client.get_metadata(tag_no=tag_number, source=source)
+```
+
+`get_metadata(id)` wraps `get_timeseries_by_id(id)`. Name and tag-number
+lookups wrap `get_timeseries()`, with `tag_no` as an alias for `name` and
+optional `source` and `facility` filters. Provide either an ID or name/tag
+filters, not both; if both `name` and `tag_no` are supplied, they must match.
+The method returns the metadata items directly as a list, without the
+`data.items` envelope, or `[]` when no items are present. All returned fields
+are preserved. Name/tag lookups return one response page, not all pages.
+
 ### Other use cases
 
 Please consult the [API Reference](https://api.equinor.com/api-details#api=Timeseries-api-v1-7) for a full overview of the API endpoints.
