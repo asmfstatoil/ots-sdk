@@ -227,6 +227,7 @@ def should_return_empty_metadata_list(api, selector, response):
     "parameters",
     [
         {},
+        {"id": ""},
         {"source": "test-source"},
         {"name": ""},
         {"tag_no": ""},

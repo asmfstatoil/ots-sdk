@@ -910,6 +910,8 @@ class TimeseriesAPI:
     ) -> List[TimeseriesModel]:
         """Return metadata items by ID or name; tag_no is an alias for name."""
         if id is not None:
+            if not id:
+                raise ValueError("Provide id, name, or tag_no")
             if any(value is not None for value in (name, tag_no, source, facility)):
                 raise ValueError("Provide either id or name/tag_no filters, not both")
             response = self.get_timeseries_by_id(id=id)

@@ -46,7 +46,9 @@ def _ots_response_to_frame(
                 value = datapoint.get("value")
             values.append(value)
 
-        index = pd.to_datetime(times, utc=True).tz_convert("Europe/Oslo")
+        index = pd.to_datetime(times, format="ISO8601", utc=True).tz_convert(
+            "Europe/Oslo"
+        )
         frame = pd.DataFrame({name: values}, index=index)
         frames.append(frame[~frame.index.duplicated(keep="first")])
 
