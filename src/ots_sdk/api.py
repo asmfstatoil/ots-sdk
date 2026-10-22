@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 from typing import Any, Dict, List, Literal, Optional
+import pandas as pd
 from azure.core.credentials import TokenCredential
+from ots_sdk.helpers import _ots_response_to_series
 from ots_sdk.http_client import (
     HttpClient,
     ContentType,
@@ -23,6 +25,7 @@ from ots_sdk.models import (
     StreamSubscriptionDataModel,
     SubscriptionCounterModel,
     SubscriptionPatchRequestItem,
+    TimeseriesModel,
     TimeseriesPatchRequestItem,
     TimeseriesRequestItem,
 )
@@ -536,6 +539,34 @@ class TimeseriesAPI:
             params=params,
         )
 
+    def read(
+        self,
+        id: str,
+        startTime: Optional[str] = None,
+        endTime: Optional[str] = None,
+        status: Optional[List[int]] = None,
+        includeOutsidePoints: Optional[bool] = None,
+        limit: Optional[int] = None,
+        continuationToken: Optional[str] = None,
+        federationSource: Optional[Enum] = None,
+        accept: ContentType = "application/json",
+    ) -> pd.Series:
+        """Read one response item as an Oslo-time Series; JSON output is required."""
+        if accept != "application/json":
+            raise ValueError("read() requires accept='application/json'")
+        response = self.get_datapoints(
+            id=id,
+            startTime=startTime,
+            endTime=endTime,
+            status=status,
+            includeOutsidePoints=includeOutsidePoints,
+            limit=limit,
+            continuationToken=continuationToken,
+            federationSource=federationSource,
+            accept=accept,
+        )
+        return _ots_response_to_series(response)
+
     def get_datapoints_by_name(
         self,
         name: str,
@@ -649,6 +680,44 @@ class TimeseriesAPI:
             accept=accept,
             params=params,
         )
+
+    def read_aggregates(
+        self,
+        id: str,
+        aggregateFunction: List[
+            Literal["avg", "min", "max", "sum", "stddev", "count", "first", "last"]
+        ],
+        startTime: Optional[str] = None,
+        endTime: Optional[str] = None,
+        status: Optional[List[int]] = None,
+        processingInterval: Optional[str] = None,
+        fill: Optional[str] = None,
+        limit: Optional[int] = None,
+        continuationToken: Optional[str] = None,
+        federationSource: Optional[Enum] = None,
+        accept: ContentType = "application/json",
+        alignToCache: Optional[bool] = None,
+    ) -> pd.Series:
+        """Read one aggregate as an Oslo-time Series; JSON output is required."""
+        if accept != "application/json":
+            raise ValueError("read_aggregates() requires accept='application/json'")
+        if len(aggregateFunction) != 1:
+            raise ValueError("read_aggregates() requires exactly one aggregate function")
+        response = self.get_aggregates(
+            id=id,
+            aggregateFunction=aggregateFunction,
+            startTime=startTime,
+            endTime=endTime,
+            status=status,
+            processingInterval=processingInterval,
+            fill=fill,
+            limit=limit,
+            continuationToken=continuationToken,
+            federationSource=federationSource,
+            accept=accept,
+            alignToCache=alignToCache,
+        )
+        return _ots_response_to_series(response, value_key=aggregateFunction[0])
 
     def get_first_datapoint(
         self,
@@ -829,6 +898,33 @@ class TimeseriesAPI:
         return self._http_client.request(
             request_type="get", url=f"{self._base_url}/{id}"
         )
+
+    def get_metadata(
+        self,
+        id: Optional[str] = None,
+        *,
+        name: Optional[str] = None,
+        tag_no: Optional[str] = None,
+        source: Optional[str] = None,
+        facility: Optional[str] = None,
+    ) -> List[TimeseriesModel]:
+        """Return metadata items by ID or name; tag_no is an alias for name."""
+        if id is not None:
+            if not id:
+                raise ValueError("Provide id, name, or tag_no")
+            if any(value is not None for value in (name, tag_no, source, facility)):
+                raise ValueError("Provide either id or name/tag_no filters, not both")
+            response = self.get_timeseries_by_id(id=id)
+        else:
+            if name is not None and tag_no is not None and name != tag_no:
+                raise ValueError("name and tag_no must match when both are provided")
+            lookup_name = name if name is not None else tag_no
+            if not lookup_name:
+                raise ValueError("Provide id, name, or tag_no")
+            response = self.get_timeseries(
+                name=lookup_name, source=source, facility=facility
+            )
+        return response.get("data", {}).get("items", [])
 
     def post_timeseries(
         self, request: TimeseriesRequestItem
