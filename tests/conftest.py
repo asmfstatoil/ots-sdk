@@ -1,4 +1,3 @@
-import ast
 from pathlib import Path
 import sys
 
@@ -12,8 +11,19 @@ if str(src_path) not in sys.path:
 
 @pytest.fixture
 def documented_response():
-    readme = repo_root / "README.md"
-    sample = next(
-        line for line in readme.read_text().splitlines() if line.startswith(">> ")
-    )
-    return {"data": ast.literal_eval(sample[3:])}
+    return {
+        "data": {
+            "items": [
+                {
+                    "id": "series-1",
+                    "datapoints": [
+                        {
+                            "time": "2022-01-01T00:00:00.000Z",
+                            "value": 1.0,
+                            "status": 192,
+                        }
+                    ],
+                }
+            ]
+        }
+    }
