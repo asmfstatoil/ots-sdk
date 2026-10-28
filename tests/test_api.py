@@ -9,12 +9,23 @@ import pytest
 from azure.core.credentials import AccessToken
 from ots_sdk import TimeseriesAPI, TimeseriesEnvironment
 from ots_sdk.api import FederationSource, IMSSubscriptionsManagementAPI
-from ots_sdk.http_client import TimeseriesRequestFailedException
+from ots_sdk.http_client import HttpClient, TimeseriesRequestFailedException
 
 
 class DummyCredentials:
     def get_token(self, *scopes: str, **kwargs) -> AccessToken:
         return AccessToken("dummytoken", 0)
+
+
+class CountingCredentials:
+    def __init__(self, expiries=(10**10,)):
+        self.expiries = expiries
+        self.calls = 0
+
+    def get_token(self, *scopes: str, **kwargs) -> AccessToken:
+        self.calls += 1
+        expiry_index = min(self.calls - 1, len(self.expiries) - 1)
+        return AccessToken(f"token-{self.calls}", self.expiries[expiry_index])
 
 
 @pytest.fixture
@@ -292,6 +303,43 @@ def should_not_retry_request_when_failing_on_non_retryable_error_code_403_forbid
         with pytest.raises(TimeseriesRequestFailedException):
             api.get_latest_datapoint("1234")
     assert m.call_count == 1, "Unexpected number of retries"
+
+
+def should_reuse_cached_token_and_refresh_at_expiry_margin(monkeypatch):
+    now = [1000]
+    monkeypatch.setattr("ots_sdk.http_client.time.time", lambda: now[0])
+    credentials = CountingCredentials(expiries=(2000, 3000))
+    client = HttpClient(credentials, "https://resource")
+
+    assert client._get_token() == "token-1"
+    now[0] = 1699
+    assert client._get_token() == "token-1"
+    assert credentials.calls == 1
+
+    now[0] = 1700
+    assert client._get_token() == "token-2"
+    assert credentials.calls == 2
+
+
+def should_retry_unauthorized_request_only_once_and_propagate_second_failure():
+    credentials = CountingCredentials()
+    client = HttpClient(credentials, "https://resource")
+    with requests_mock.Mocker() as transport:
+        transport.register_uri(
+            "GET",
+            "https://test",
+            [
+                {"status_code": 401, "text": '{"message":"Unauthorized"}'},
+                {"status_code": 401, "text": '{"message":"Still unauthorized"}'},
+            ],
+        )
+
+        with pytest.raises(TimeseriesRequestFailedException) as error:
+            client.request("get", "https://test")
+
+    assert error.value.status_code == 401
+    assert transport.call_count == 2
+    assert credentials.calls == 2
 
 
 @pytest.mark.parametrize("responseText", [(""), ("blah")])
