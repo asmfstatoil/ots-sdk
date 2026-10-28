@@ -1,4 +1,6 @@
 import os
+import time
+import threading
 from typing import Literal, Optional, Union, Dict, Any, Mapping, Sequence
 from azure.identity import (
     InteractiveBrowserCredential,
@@ -114,25 +116,43 @@ def _request(
         return response.content
 
 
+# Refresh this many seconds before the token actually expires.
+TOKEN_EXPIRY_MARGIN_SECONDS = 300
+
+
 class HttpClient:
     def __init__(self, azure_credential: TokenCredential, resource_id: str):
         self._azure_credential = azure_credential
         self._resource_id = resource_id
+        self._token: Optional[str] = None
+        self._token_expires_on: float = 0.0
+        self._token_lock = threading.Lock()
 
-    def request(
+    def _get_token(self, force_refresh: bool = False) -> str:
+        with self._token_lock:
+            if (
+                force_refresh
+                or self._token is None
+                or time.time() >= self._token_expires_on - TOKEN_EXPIRY_MARGIN_SECONDS
+            ):
+                access_token = self._azure_credential.get_token(
+                    f"{self._resource_id}/.default"
+                )
+                self._token = access_token.token
+                self._token_expires_on = float(access_token.expires_on)
+            return self._token
+
+    def _send(
         self,
+        token: str,
         request_type: RequestType,
         url: str,
-        accept: ContentType = "application/json",
-        payload: Optional[Union[Mapping[str, Any], Sequence[Any]]] = None,
-        params: Optional[Mapping[str, Any]] = None,
+        accept: ContentType,
+        payload: Optional[Union[Mapping[str, Any], Sequence[Any]]],
+        params: Optional[Mapping[str, Any]],
     ) -> Any:
-
-        access_token = self._azure_credential.get_token(
-            f"{self._resource_id}/.default"
-        )  # handles caching and refreshing internally
         headers = {
-            "Authorization": f"Bearer {access_token.token}",
+            "Authorization": f"Bearer {token}",
             "Content-Type": "application/json",
             "Accept": accept,
             "User-Agent": f"Omnia Timeseries SDK/{version} {system_version_string}",
@@ -144,3 +164,29 @@ class HttpClient:
             payload=payload,
             params=params,
         )
+
+    def request(
+        self,
+        request_type: RequestType,
+        url: str,
+        accept: ContentType = "application/json",
+        payload: Optional[Union[Mapping[str, Any], Sequence[Any]]] = None,
+        params: Optional[Mapping[str, Any]] = None,
+    ) -> Any:
+
+        try:
+            return self._send(
+                self._get_token(), request_type, url, accept, payload, params
+            )
+        except TimeseriesRequestFailedException as e:
+            if e.status_code != 401:
+                raise
+            logger.debug("Request unauthorized, refreshing token and retrying once")
+            return self._send(
+                self._get_token(force_refresh=True),
+                request_type,
+                url,
+                accept,
+                payload,
+                params,
+            )
