@@ -1,5 +1,5 @@
 import os
-from typing import Literal, Optional, Union, Dict, Any, Mapping, Sequence
+from typing import Literal, Optional, Tuple, Union, Dict, Any, Mapping, Sequence
 from azure.identity import (
     InteractiveBrowserCredential,
     AuthenticationRecord,
@@ -7,6 +7,7 @@ from azure.identity import (
 )
 from azure.core.credentials import TokenCredential
 import requests
+from requests.adapters import HTTPAdapter
 import logging
 
 from ots_sdk.helpers import retry
@@ -20,6 +21,12 @@ ContentType = Literal[
 ]
 
 RequestType = Literal["get", "put", "post", "patch", "delete"]
+
+# Connections kept alive per host, sized for a moderately threaded caller
+DEFAULT_POOL_SIZE = 32
+
+# (connect, read) seconds, so a stalled connection fails and can be retried instead of blocking a thread forever
+DEFAULT_TIMEOUT = (10.0, 120.0)
 
 logger = logging.getLogger(__name__)
 version = metadata.version("ots_sdk")
@@ -96,15 +103,22 @@ def get_interactive_browser_credential(
 
 @retry(logger=logger)
 def _request(
+    session: requests.Session,
     request_type: RequestType,
     url: str,
     headers: Dict[str, Any],
     payload: Optional[Union[Mapping[str, Any], Sequence[Any]]] = None,
     params: Optional[Mapping[str, Any]] = None,
+    timeout: Optional[Union[float, Tuple[float, float]]] = None,
 ) -> Union[Dict[str, Any], bytes]:
 
-    response = requests.request(
-        request_type, url, headers=headers, json=payload, params=params
+    response = session.request(
+        request_type,
+        url,
+        headers=headers,
+        json=payload,
+        params=params,
+        timeout=timeout,
     )
     if not response.ok:
         raise TimeseriesRequestFailedException(response)
@@ -115,9 +129,30 @@ def _request(
 
 
 class HttpClient:
-    def __init__(self, azure_credential: TokenCredential, resource_id: str):
+    def __init__(
+        self,
+        azure_credential: TokenCredential,
+        resource_id: str,
+        pool_size: int = DEFAULT_POOL_SIZE,
+        timeout: Optional[Union[float, Tuple[float, float]]] = DEFAULT_TIMEOUT,
+    ):
         self._azure_credential = azure_credential
         self._resource_id = resource_id
+        self._timeout = timeout
+        # A shared session keeps TLS connections alive between requests. Size the pool to the number of threads using the client; beyond that requests still succeed, but extra connections are not reused
+        self._session = requests.Session()
+        adapter = HTTPAdapter(pool_connections=pool_size, pool_maxsize=pool_size)
+        self._session.mount("https://", adapter)
+        self._session.mount("http://", adapter)
+
+    def close(self) -> None:
+        self._session.close()
+
+    def __enter__(self) -> "HttpClient":
+        return self
+
+    def __exit__(self, *exc_info: Any) -> None:
+        self.close()
 
     def request(
         self,
@@ -138,9 +173,11 @@ class HttpClient:
             "User-Agent": f"Omnia Timeseries SDK/{version} {system_version_string}",
         }
         return _request(
+            session=self._session,
             request_type=request_type,
             url=url,
             headers=headers,
             payload=payload,
             params=params,
+            timeout=self._timeout,
         )
