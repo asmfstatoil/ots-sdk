@@ -139,11 +139,20 @@ class HttpClient:
         self._azure_credential = azure_credential
         self._resource_id = resource_id
         self._timeout = timeout
-        # A shared session keeps TLS connections alive between requests, and the pool must be at least as large as the number of threads using the client
+        # A shared session keeps TLS connections alive between requests. Size the pool to the number of threads using the client; beyond that requests still succeed, but extra connections are not reused
         self._session = requests.Session()
         adapter = HTTPAdapter(pool_connections=pool_size, pool_maxsize=pool_size)
         self._session.mount("https://", adapter)
         self._session.mount("http://", adapter)
+
+    def close(self) -> None:
+        self._session.close()
+
+    def __enter__(self) -> "HttpClient":
+        return self
+
+    def __exit__(self, *exc_info: Any) -> None:
+        self.close()
 
     def request(
         self,

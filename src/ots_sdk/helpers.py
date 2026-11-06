@@ -5,6 +5,7 @@ import time
 from typing import Any, Dict, Optional, Union
 
 import pandas as pd
+import requests
 
 from ots_sdk.models import TimeseriesRequestFailedException
 
@@ -98,9 +99,34 @@ def retry(
                     logger.debug(f"{total_tries + 1 - _tries}. try:")
                 try:
                     return f(*args, **kwargs)
+                except (
+                    requests.exceptions.Timeout,
+                    requests.exceptions.ConnectionError,
+                ) as e:
+                    # A connect failure never reached the server; anything else is only safe to repeat for GET
+                    if not (
+                        isinstance(e, requests.exceptions.ConnectTimeout)
+                        or kwargs.get("request_type") == "get"
+                    ):
+                        raise
+                    _tries -= 1
+                    exception = e
+                    wait = _wait_time(_delay)
+                    _delay *= backoff_factor
+                    if _tries > 0:
+                        if logger is not None:
+                            logger.warning(
+                                f"Function: {f.__name__} failed with {type(e).__name__}. Retrying in {wait:.2f} seconds, with {_tries} retries remaining!"
+                            )
+                        time.sleep(wait)
+                    elif logger is not None:
+                        logger.warning(
+                            f"Function: {f.__name__} Failed despite best efforts after {total_tries} tries."
+                        )
                 except TimeseriesRequestFailedException as e:
                     _tries -= 1
                     if e.status_code in retry_status_codes:
+                        wait = _wait_time(_delay, e.retry_after)
                         if logger is not None:
                             if _tries == 0:
                                 msg = str(
@@ -108,11 +134,11 @@ def retry(
                                 )
                             else:
                                 msg = str(
-                                    f"Function: {f.__name__} failed with {e}. Retrying in up to {_delay} seconds, with {_tries} retries remaining!\n"
+                                    f"Function: {f.__name__} failed with {e}. Retrying in {wait:.2f} seconds, with {_tries} retries remaining!\n"
                                 )
                             logger.warning(msg)
                         if _tries > 0:
-                            time.sleep(_wait_time(_delay, e.retry_after))
+                            time.sleep(wait)
                         _delay *= backoff_factor
                         exception = e
                     else:

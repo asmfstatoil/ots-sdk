@@ -1,14 +1,16 @@
 from typing import List, Optional, TypedDict, Dict, Any, Literal
 from requests.models import Response
 import json
+import math
 
 
 def _parse_retry_after(value: Optional[str]) -> Optional[float]:
     """Seconds from a Retry-After header; the HTTP-date form is not supported."""
     try:
-        return max(float(value), 0.0)
+        seconds = float(value)
     except (TypeError, ValueError):
         return None
+    return max(seconds, 0.0) if math.isfinite(seconds) else None
 
 
 class MessageModel(TypedDict):

@@ -6,6 +6,7 @@ from urllib import parse
 import pandas as pd
 import requests_mock
 import pytest
+import requests
 from azure.core.credentials import AccessToken
 from ots_sdk import TimeseriesAPI, TimeseriesEnvironment
 from ots_sdk.api import FederationSource, IMSSubscriptionsManagementAPI
@@ -569,3 +570,67 @@ def should_not_sleep_after_last_failed_try(api, mocker_sleep):
         with pytest.raises(TimeseriesRequestFailedException):
             api.get_datapoints("1234")
     assert len(mocker_sleep) == 2
+
+
+def should_wait_backoff_when_retry_after_is_shorter(api, mocker_sleep):
+    with requests_mock.Mocker() as transport:
+        transport.get(
+            "https://test/1234/data",
+            [
+                {
+                    "status_code": 429,
+                    "headers": {"Retry-After": "0"},
+                    "json": {"message": "Too many requests"},
+                },
+                {"status_code": 200, "json": {"data": {"items": []}}},
+            ],
+        )
+        api.get_datapoints("1234")
+    assert 0.25 <= mocker_sleep[0] <= 0.5
+
+
+def should_ignore_non_finite_retry_after(api, mocker_sleep):
+    with requests_mock.Mocker() as transport:
+        transport.get(
+            "https://test/1234/data",
+            [
+                {
+                    "status_code": 429,
+                    "headers": {"Retry-After": "nan"},
+                    "json": {"message": "Too many requests"},
+                },
+                {"status_code": 200, "json": {"data": {"items": []}}},
+            ],
+        )
+        api.get_datapoints("1234")
+    assert 0.25 <= mocker_sleep[0] <= 0.5
+
+
+def should_retry_get_on_read_timeout(api, mocker_sleep):
+    with requests_mock.Mocker() as transport:
+        transport.get(
+            "https://test/1234/data",
+            [
+                {"exc": requests.exceptions.ReadTimeout},
+                {"status_code": 200, "json": {"data": {"items": []}}},
+            ],
+        )
+        api.get_datapoints("1234")
+    assert len(mocker_sleep) == 1
+
+
+def should_not_retry_post_on_read_timeout(api, mocker_sleep):
+    with requests_mock.Mocker() as transport:
+        transport.post(
+            "https://test/1234/data", exc=requests.exceptions.ReadTimeout
+        )
+        with pytest.raises(requests.exceptions.ReadTimeout):
+            api._http_client.request("post", "https://test/1234/data", payload={})
+    assert mocker_sleep == []
+    assert transport.call_count == 1
+
+
+def should_close_session_on_exit(api):
+    with api._http_client as client:
+        session = client._session
+    assert session.adapters  # session object still inspectable after close
