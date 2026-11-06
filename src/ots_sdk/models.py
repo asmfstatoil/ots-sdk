@@ -3,6 +3,14 @@ from requests.models import Response
 import json
 
 
+def _parse_retry_after(value: Optional[str]) -> Optional[float]:
+    """Seconds from a Retry-After header; the HTTP-date form is not supported."""
+    try:
+        return max(float(value), 0.0)
+    except (TypeError, ValueError):
+        return None
+
+
 class MessageModel(TypedDict):
     statusCode: int
     message: str
@@ -266,6 +274,7 @@ class TimeseriesRequestFailedException(Exception):
         self._reason = response.reason
         self._message = error["message"]
         self._trace_id = error["traceId"] if "traceId" in error else None
+        self._retry_after = _parse_retry_after(response.headers.get("Retry-After"))
         super().__init__(
             f"Status code: {self._status_code}, Reason: {self._reason}, Message: {self._message},  Trace ID: {self._trace_id}"
         )
@@ -285,3 +294,7 @@ class TimeseriesRequestFailedException(Exception):
     @property
     def trace_id(self) -> Optional[str]:
         return self._trace_id
+
+    @property
+    def retry_after(self) -> Optional[float]:
+        return self._retry_after

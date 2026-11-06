@@ -9,7 +9,12 @@ import pytest
 from azure.core.credentials import AccessToken
 from ots_sdk import TimeseriesAPI, TimeseriesEnvironment
 from ots_sdk.api import FederationSource, IMSSubscriptionsManagementAPI
-from ots_sdk.http_client import TimeseriesRequestFailedException
+from ots_sdk.http_client import (
+    DEFAULT_POOL_SIZE,
+    DEFAULT_TIMEOUT,
+    TimeseriesRequestFailedException,
+)
+from ots_sdk.helpers import max_retry_after_seconds
 
 
 class DummyCredentials:
@@ -23,6 +28,13 @@ def api():
     api = TimeseriesAPI(azure_credential=DummyCredentials(), environment=env)
     api._base_url = "https://test"
     return api
+
+
+@pytest.fixture
+def mocker_sleep(monkeypatch):
+    sleeps = []
+    monkeypatch.setattr("ots_sdk.helpers.time.sleep", sleeps.append)
+    return sleeps
 
 
 @pytest.fixture
@@ -487,3 +499,73 @@ def should_patch_subscription_by_uid_reset_with_empty_payload(
         assert json.loads(request.text) == payload
         assert request.qs.get("resetstate") == ["true"]
         assert response["count"] == 0
+
+
+def should_pool_connections_in_shared_session(api):
+    adapter = api._http_client._session.get_adapter("https://test")
+    assert adapter._pool_maxsize == DEFAULT_POOL_SIZE
+    assert adapter._pool_connections == DEFAULT_POOL_SIZE
+
+
+def should_send_timeout_on_requests(api):
+    with requests_mock.Mocker() as transport:
+        transport.get("https://test/1234/data", json={"data": {"items": []}})
+        api.get_datapoints("1234")
+    assert transport.last_request.timeout == DEFAULT_TIMEOUT
+
+
+def should_honor_retry_after_when_retrying(api, mocker_sleep):
+    with requests_mock.Mocker() as transport:
+        transport.get(
+            "https://test/1234/data",
+            [
+                {
+                    "status_code": 429,
+                    "headers": {"Retry-After": "7"},
+                    "json": {"message": "Too many requests"},
+                },
+                {"status_code": 200, "json": {"data": {"items": []}}},
+            ],
+        )
+        api.get_datapoints("1234")
+    assert mocker_sleep == [7.0]
+
+
+def should_cap_retry_after(api, mocker_sleep):
+    with requests_mock.Mocker() as transport:
+        transport.get(
+            "https://test/1234/data",
+            [
+                {
+                    "status_code": 429,
+                    "headers": {"Retry-After": "3600"},
+                    "json": {"message": "Too many requests"},
+                },
+                {"status_code": 200, "json": {"data": {"items": []}}},
+            ],
+        )
+        api.get_datapoints("1234")
+    assert mocker_sleep == [max_retry_after_seconds]
+
+
+def should_jitter_backoff_without_retry_after(api, mocker_sleep):
+    with requests_mock.Mocker() as transport:
+        transport.get(
+            "https://test/1234/data",
+            [
+                {"status_code": 503, "json": {"message": "Too many requests"}},
+                {"status_code": 200, "json": {"data": {"items": []}}},
+            ],
+        )
+        api.get_datapoints("1234")
+    assert 0.25 <= mocker_sleep[0] <= 0.5
+
+
+def should_not_sleep_after_last_failed_try(api, mocker_sleep):
+    with requests_mock.Mocker() as transport:
+        transport.get(
+            "https://test/1234/data", status_code=503, json={"message": "Unavailable"}
+        )
+        with pytest.raises(TimeseriesRequestFailedException):
+            api.get_datapoints("1234")
+    assert len(mocker_sleep) == 2

@@ -1,5 +1,6 @@
 from functools import wraps
 import logging
+import random
 import time
 from typing import Any, Dict, Optional, Union
 
@@ -9,6 +10,17 @@ from ots_sdk.models import TimeseriesRequestFailedException
 
 # Reasonable status codes to retry, based on descriptions at https://en.wikipedia.org/wiki/List_of_HTTP_status_codes
 retry_status_codes = [408, 409, 425, 429, 502, 503, 504]
+
+# Upper bound for a server provided Retry-After, so a bad header cannot stall a caller
+max_retry_after_seconds = 30.0
+
+
+def _wait_time(delay: float, retry_after: Optional[float] = None) -> float:
+    """Jitter the backoff so concurrent callers do not retry in lockstep, and never wait less than the server asks for."""
+    wait = random.uniform(delay / 2, delay)
+    if retry_after is not None:
+        wait = max(wait, min(retry_after, max_retry_after_seconds))
+    return wait
 
 
 def _ots_response_to_frame(
@@ -96,10 +108,11 @@ def retry(
                                 )
                             else:
                                 msg = str(
-                                    f"Function: {f.__name__} failed with {e}. Retrying in {_delay} seconds, with {_tries} retries remaining!\n"
+                                    f"Function: {f.__name__} failed with {e}. Retrying in up to {_delay} seconds, with {_tries} retries remaining!\n"
                                 )
                             logger.warning(msg)
-                        time.sleep(_delay)
+                        if _tries > 0:
+                            time.sleep(_wait_time(_delay, e.retry_after))
                         _delay *= backoff_factor
                         exception = e
                     else:
